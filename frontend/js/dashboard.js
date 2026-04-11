@@ -66,16 +66,26 @@ function startAutoRefresh() {
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
+function getGlobalParams() {
+  const params = {};
+  if (currentCity) params.city_name = currentCity;
+  const df = document.getElementById('dateFrom').value;
+  const dt = document.getElementById('dateTo').value;
+  if (df) params.date_from = df;
+  if (dt) params.date_to   = dt;
+  return params;
+}
+
 function onCityChange() {
   currentCity = document.getElementById('cityFilter').value;
   loadAll();
 }
 
-function onDateChange() { loadPriceTrends(); }
+function onDateChange() { loadAll(); }
 
 // ── KPI Summary ──────────────────────────────────────────────────────────────
 async function loadSummary() {
-  const s = await API.getSummary();
+  const s = await API.getSummary(getGlobalParams());
   document.getElementById('kpiTotalListings').textContent    = Fmt.number(s.total_listings);
   document.getElementById('kpiActiveListings').textContent   = Fmt.number(s.active_listings);
   document.getElementById('kpiTransactions').textContent     = Fmt.number(s.total_transactions);
@@ -88,13 +98,7 @@ async function loadSummary() {
 
 // ── Chart 1: Price Trends Line Chart ─────────────────────────────────────────
 async function loadPriceTrends() {
-  const params = { city_name: currentCity };
-  const df = document.getElementById('dateFrom').value;
-  const dt = document.getElementById('dateTo').value;
-  if (df) params.date_from = df;
-  if (dt) params.date_to   = dt;
-
-  const data = await API.getPriceTrends(params);
+  const data = await API.getPriceTrends(getGlobalParams());
   if (!data || !data.length) return;
 
   // Group by city
@@ -142,7 +146,9 @@ async function loadPriceTrends() {
 
 // ── Chart 2: Locality Demand Bar Chart ───────────────────────────────────────
 async function loadLocalityDemand() {
-  const data = await API.getLocalityDemand({ city_name: currentCity, top_n: 15 });
+  const params = getGlobalParams();
+  params.top_n = 15;
+  const data = await API.getLocalityDemand(params);
   if (!data || !data.length) return;
 
   // Aggregate by locality (sum listing_count across property types)
@@ -204,7 +210,7 @@ async function loadLocalityDemand() {
 
 // ── Chart 3: Property Type Donut ─────────────────────────────────────────────
 async function loadPropertyDist() {
-  const data = await API.getPropertyDist({ city_name: currentCity });
+  const data = await API.getPropertyDist(getGlobalParams());
   if (!data || !data.length) return;
 
   // Aggregate by property_type
@@ -260,7 +266,7 @@ async function loadPropertyDist() {
 
 // ── Chart 4: Bedroom vs Price Bar Chart ──────────────────────────────────────
 async function loadBedroomPrice() {
-  const data = await API.getBedroomPrice({ city_name: currentCity });
+  const data = await API.getBedroomPrice(getGlobalParams());
   if (!data || !data.length) return;
 
   const cityMap = {};
@@ -294,7 +300,9 @@ async function loadBedroomPrice() {
 
 // ── Agent Performance Table ───────────────────────────────────────────────────
 async function loadAgentTable() {
-  const data = await API.getAgentPerf({ city_name: currentCity, top_n: 10 });
+  const params = getGlobalParams();
+  params.top_n = 10;
+  const data = await API.getAgentPerf(params);
   const tbody = document.getElementById('agentTableBody');
   if (!tbody || !data) return;
 

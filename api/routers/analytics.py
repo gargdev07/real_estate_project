@@ -31,11 +31,24 @@ def _safe_query(db: Session, sql: str, params: dict | None = None):
 
 @router.get("/summary", response_model=schemas.DashboardSummary,
             summary="Top-level KPI summary for dashboard header")
-def get_summary(db: Session = Depends(get_db),
-                _: models.User = Depends(auth.get_current_user)):
-    row     = _safe_query(db, "SELECT COUNT(*), COUNT(*) FILTER (WHERE is_active=TRUE), ROUND(AVG(price_inr)::NUMERIC,2), ROUND(AVG(price_sqft)::NUMERIC,2) FROM listings WHERE price_inr > 0")
-    txn_row = _safe_query(db, "SELECT COUNT(*), ROUND(SUM(sale_price)::NUMERIC,2) FROM transactions WHERE status='Completed'")
-    geo_row = _safe_query(db, "SELECT COUNT(DISTINCT city_id), COUNT(DISTINCT locality_id) FROM listings WHERE is_active=TRUE")
+def get_summary(
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(auth.get_current_user)):
+    
+    l_cond = "price_inr > 0"
+    params = {}
+    if date_from: l_cond += " AND register_date >= :date_from::date"; params["date_from"] = date_from
+    if date_to:   l_cond += " AND register_date <= :date_to::date";   params["date_to"] = date_to
+
+    t_cond = "status='Completed'"
+    if date_from: t_cond += " AND transaction_date >= :date_from::date"
+    if date_to:   t_cond += " AND transaction_date <= :date_to::date"
+
+    row     = _safe_query(db, f"SELECT COUNT(*), COUNT(*) FILTER (WHERE is_active=TRUE), ROUND(AVG(price_inr)::NUMERIC,2), ROUND(AVG(price_sqft)::NUMERIC,2) FROM listings WHERE {l_cond}", params)
+    txn_row = _safe_query(db, f"SELECT COUNT(*), ROUND(SUM(sale_price)::NUMERIC,2) FROM transactions WHERE {t_cond}", params)
+    geo_row = _safe_query(db, f"SELECT COUNT(DISTINCT city_id), COUNT(DISTINCT locality_id) FROM listings WHERE is_active=TRUE AND {l_cond}", params)
 
     r = row[0]     if row     else (0,0,None,None)
     t = txn_row[0] if txn_row else (0, None)
@@ -89,6 +102,8 @@ def locality_demand(
     city_name:     Optional[str] = Query(None),
     property_type: Optional[str] = Query(None),
     top_n:         int = Query(20, ge=5, le=100),
+    date_from:     Optional[str] = Query(None),
+    date_to:       Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: models.User = Depends(auth.get_current_user),
 ):
@@ -97,6 +112,8 @@ def locality_demand(
     params: dict = {"top_n": top_n}
     if city_name:     conds.append("c.city_name = :city_name");              params["city_name"]     = city_name
     if property_type: conds.append("l.property_type ILIKE :ptype");          params["ptype"]         = f"%{property_type}%"
+    if date_from: conds.append("l.register_date >= :date_from::date"); params["date_from"] = date_from
+    if date_to:   conds.append("l.register_date <= :date_to::date");   params["date_to"]   = date_to
     where = " AND ".join(conds)
 
     rows = _safe_query(db, f"""
@@ -127,6 +144,8 @@ def locality_demand(
             summary="Listing count + avg price per property type")
 def property_distribution(
     city_name: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: models.User = Depends(auth.get_current_user),
 ):
@@ -134,6 +153,8 @@ def property_distribution(
               "l.is_active = TRUE", "l.property_type IS NOT NULL"]
     params: dict = {}
     if city_name: conds.append("c.city_name = :city_name"); params["city_name"] = city_name
+    if date_from: conds.append("l.register_date >= :date_from::date"); params["date_from"] = date_from
+    if date_to:   conds.append("l.register_date <= :date_to::date");   params["date_to"]   = date_to
     where = " AND ".join(conds)
 
     rows = _safe_query(db, f"""
@@ -157,12 +178,16 @@ def property_distribution(
 def agent_performance(
     city_name: Optional[str] = Query(None),
     top_n:     int = Query(15, ge=5, le=50),
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: models.User = Depends(auth.get_current_user),
 ):
     conds  = ["a.is_active = TRUE"]
     params: dict = {"top_n": top_n}
     if city_name: conds.append("c.city_name = :city_name"); params["city_name"] = city_name
+    if date_from: conds.append("(t.transaction_date >= :date_from::date OR l.register_date >= :date_from::date)"); params["date_from"] = date_from
+    if date_to:   conds.append("(t.transaction_date <= :date_to::date OR l.register_date <= :date_to::date)");   params["date_to"]   = date_to
     where = " AND ".join(conds)
 
     rows = _safe_query(db, f"""
@@ -194,6 +219,8 @@ def agent_performance(
 @router.get("/bedroom-price", summary="Avg price per sqft by bedroom count")
 def bedroom_vs_price(
     city_name: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to:   Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: models.User = Depends(auth.get_current_user),
 ):
@@ -201,6 +228,8 @@ def bedroom_vs_price(
               "l.bedroom_num BETWEEN 1 AND 6", "l.is_active = TRUE"]
     params: dict = {}
     if city_name: conds.append("c.city_name = :city_name"); params["city_name"] = city_name
+    if date_from: conds.append("l.register_date >= :date_from::date"); params["date_from"] = date_from
+    if date_to:   conds.append("l.register_date <= :date_to::date");   params["date_to"]   = date_to
     where = " AND ".join(conds)
 
     rows = _safe_query(db, f"""
