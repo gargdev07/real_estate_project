@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropAnalytics — Dashboard</title>
+<meta name="description" content="Real estate market analytics dashboard — price trends, locality demand, property distribution, and agent leaderboard across Indian cities.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="icon">🏠</div>
+      <div><div class="name">PropAnalytics</div><div class="sub">Real Estate Intelligence</div></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Analytics</div>
+      <a class="nav-item active" href="index.html"><span class="icon">📊</span> Dashboard</a>
+      <a class="nav-item" href="admin.html"><span class="icon">🏘️</span> Listings</a>
+      <a class="nav-item" href="agents.html"><span class="icon">👤</span> Agents</a>
+      <a class="nav-item" href="transactions.html"><span class="icon">💰</span> Transactions</a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="navAvatar">A</div>
+      <div>
+        <div class="user-name" id="navUsername">—</div>
+        <div class="user-role"  id="navRole">—</div>
+      </div>
+      <button class="logout-btn" onclick="logout()" title="Logout">⇥</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Market Dashboard</div>
+      </div>
+      <div class="topbar-right">
+        <span class="last-updated" id="lastUpdated">Loading…</span>
+        <button class="btn btn-secondary btn-sm" onclick="manualRefresh()">
+          <span id="refreshIcon">↻</span> Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Filters -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <span class="filter-label">City</span>
+          <select id="cityFilter" onchange="onCityChange()">
+            <option value="">All Cities</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">From</span>
+          <input type="date" id="dateFrom" onchange="onDateChange()">
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">To</span>
+          <input type="date" id="dateTo" onchange="onDateChange()">
+        </div>
+        <div style="margin-left:auto;font-size:12px;color:var(--muted)">
+          Auto-refresh every 30s — real estate listings update periodically
+        </div>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Listings</div>
+          <div class="kpi-value" id="kpiTotalListings">—</div>
+          <div class="kpi-sub" id="kpiLocalities">— localities</div>
+          <div class="kpi-sub" id="kpiCities">— cities</div>     
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Active Listings</div>
+          <div class="kpi-value" id="kpiActiveListings">—</div>
+          <div class="kpi-sub" id="kpiAvgPriceSqft">—</div>
+          <span class="kpi-badge badge-green">Live</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Completed Transactions</div>
+          <div class="kpi-value" id="kpiTransactions">—</div>
+          <div class="kpi-sub">Closed deals</div>
+          <span class="kpi-badge badge-blue">Deals</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Sales Value</div>
+          <div class="kpi-value" id="kpiSalesValue">—</div>
+          <div class="kpi-sub" id="kpiAvgPrice">—</div>
+          <span class="kpi-badge badge-amber">Revenue</span>
+        </div>
+      </div>
+    
+
+      <!-- Row 1: Price Trend (full width) -->
+      <div style="margin-bottom:18px">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Price Trend — Avg ₹/sqft per Month</div>
+              <div class="chart-sub">Tracks monthly average price per square foot across all cities. Helps identify seasonal peaks, city-wise appreciation, and market cycles.</div>
+            </div>
+          </div>
+          <canvas id="chartPriceTrends" height="90"></canvas>
+        </div>
+      </div>
+
+      <!-- Row 2: Locality Demand + Property Donut -->
+      <div class="chart-grid-3" style="margin-bottom:18px">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Top Localities by Demand</div>
+              <div class="chart-sub">Bars = listing count. Orange line = avg ₹/sqft. Reveals where supply is concentrated vs where price is highest.</div>
+            </div>
+          </div>
+          <canvas id="chartLocalityDemand" height="130"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Property Type Distribution</div>
+              <div class="chart-sub">Share of listings by category. Shows product-mix by city.</div>
+            </div>
+          </div>
+          <canvas id="chartPropDist" height="160"></canvas>
+          <div id="propBreakdown" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- Row 3: Bedroom Price + Agent Table -->
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Avg Price/sqft by Bedroom Count</div>
+              <div class="chart-sub">Compares how adding bedrooms affects price across cities. Useful for investment decisions on unit size.</div>
+            </div>
+          </div>
+          <canvas id="chartBedroomPrice" height="130"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Top Agents by Sales Value</div>
+              <div class="chart-sub">Leaderboard ranked by total closed transaction value.</div>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th><th>Agent</th><th>City</th>
+                  <th style="text-align:right">Listings</th>
+                  <th style="text-align:right">Sales Value</th>
+                </tr>
+              </thead>
+              <tbody id="agentTableBody">
+                <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-body -->
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

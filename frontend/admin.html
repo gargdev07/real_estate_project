@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PropAnalytics — Listings</title>
+  <meta name="description"
+    content="Manage real estate property listings — create, update, filter, and delete listings across Indian cities.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="icon">🏠</div>
+        <div>
+          <div class="name">PropAnalytics</div>
+          <div class="sub">Real Estate Intelligence</div>
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Analytics</div>
+        <a class="nav-item" href="index.html"><span class="icon">📊</span> Dashboard</a>
+        <a class="nav-item active" href="admin.html"><span class="icon">🏘️</span> Listings</a>
+        <a class="nav-item" href="agents.html"><span class="icon">👤</span> Agents</a>
+        <a class="nav-item" href="transactions.html"><span class="icon">💰</span> Transactions</a>
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="navAvatar">A</div>
+        <div>
+          <div class="user-name" id="navUsername">—</div>
+          <div class="user-role" id="navRole">—</div>
+        </div>
+        <button class="logout-btn" onclick="logout()" title="Logout">⇥</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-title">Listings Management</div>
+        <div class="topbar-right">
+          <button class="btn btn-primary" onclick="openCreateModal()">+ New Listing</button>
+        </div>
+      </div>
+
+      <div class="page-body">
+
+        <!-- Filters -->
+        <div class="filters-bar">
+          <div class="filter-group">
+            <span class="filter-label">City</span>
+            <select id="fCity" onchange="applyFilters()">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Type</span>
+            <select id="fType" onchange="applyFilters()">
+              <option value="">All Types</option>
+              <option>Residential Apartment</option>
+              <option>Independent/Builder Floor</option>
+              <option>Independent House/Villa</option>
+              <option>Residential Land</option>
+              <option>Studio Apartment</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Transact</span>
+            <select id="fTransact" onchange="applyFilters()">
+              <option value="">All</option>
+              <option value="1">Buy/Sell</option>
+              <option value="2">Rent</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">BHK</span>
+            <select id="fBedrooms" onchange="applyFilters()">
+              <option value="">Any</option>
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Min ₹</span>
+            <input type="number" id="fMinPrice" placeholder="0" style="width:110px" oninput="debounceFilter()">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Max ₹</span>
+            <input type="number" id="fMaxPrice" placeholder="∞" style="width:110px" oninput="debounceFilter()">
+          </div>
+          <div class="filter-group">
+            <input type="text" id="fSearch" placeholder="Search name / description…" style="width:220px"
+              oninput="debounceFilter()">
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+        </div>
+
+        <!-- Table -->
+        <div class="chart-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <span id="resultCount" style="font-size:13px;color:var(--muted)">Loading…</span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Property</th>
+                  <th>City / Locality</th>
+                  <th>Type</th>
+                  <th>BHK</th>
+                  <th>Area sqft</th>
+                  <th>Price</th>
+                  <th>₹/sqft</th>
+                  <th>Listed</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="listingsBody">
+                <tr>
+                  <td colspan="11">
+                    <div class="empty-state">
+                      <div class="icon">⌛</div>Loading…
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="paginationRow"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Create / Edit Modal -->
+  <div class="modal-overlay hidden" id="listingModal">
+    <div class="modal">
+      <div class="modal-title" id="modalTitle">New Listing</div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Prop ID *</label>
+          <input type="text" id="mPropId" placeholder="e.g. PROP_001">
+        </div>
+        <div class="form-group-modal">
+          <label>City *</label>
+          <select id="mCity" onchange="loadModalLocalities()"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Locality</label>
+          <select id="mLocality">
+            <option value="">— Select —</option>
+          </select>
+        </div>
+        <div class="form-group-modal">
+          <label>Property Type</label>
+          <select id="mPropType">
+            <option>Residential Apartment</option>
+            <option>Independent/Builder Floor</option>
+            <option>Independent House/Villa</option>
+            <option>Residential Land</option>
+            <option>Studio Apartment</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Transaction Type</label>
+          <select id="mTransact">
+            <option value="1">Buy / Sell</option>
+            <option value="2">Rent</option>
+          </select>
+        </div>
+        <div class="form-group-modal">
+          <label>Furnishing</label>
+          <select id="mFurnish">
+            <option value="1">Furnished</option>
+            <option value="2">Semi-Furnished</option>
+            <option value="4">Unfurnished</option>
+            <option value="0">Unknown</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Bedrooms</label>
+          <input type="number" id="mBedrooms" min="0" max="10" value="2">
+        </div>
+        <div class="form-group-modal">
+          <label>Bathrooms</label>
+          <input type="number" id="mBathrooms" min="0" max="10" value="2">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Min Area (sqft)</label>
+          <input type="number" id="mMinArea" min="0" placeholder="800">
+        </div>
+        <div class="form-group-modal">
+          <label>Max Area (sqft)</label>
+          <input type="number" id="mMaxArea" min="0" placeholder="1200">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Price (₹) *</label>
+          <input type="number" id="mPrice" min="0" placeholder="5000000">
+        </div>
+        <div class="form-group-modal">
+          <label>Price / sqft (₹)</label>
+          <input type="number" id="mPriceSqft" min="0" placeholder="5000">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-modal">
+          <label>Register Date</label>
+          <input type="date" id="mRegDate">
+        </div>
+        <div class="form-group-modal">
+          <label>Verified</label>
+          <select id="mVerified">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group-modal" style="margin-bottom:14px">
+        <label>Property Name</label>
+        <input type="text" id="mPropName" placeholder="e.g. Prestige Lake View">
+      </div>
+      <div class="form-group-modal" style="margin-bottom:14px">
+        <label>Description</label>
+        <textarea id="mDesc" placeholder="Brief description…"></textarea>
+      </div>
+      <div id="modalError" style="display:none;color:var(--red);font-size:13px;margin-bottom:10px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitListing()" id="modalSubmitBtn">Save Listing</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    let currentPage = 1;
+    let editingId = null;
+    let debounceTimer = null;
+    let citiesData = [];
+
+    async function init() {
+      if (!requireAuth()) return;
+      const user = await API.me().catch(() => null);
+      if (user) {
+        document.getElementById('navUsername').textContent = user.username;
+        document.getElementById('navRole').textContent = user.role;
+        document.getElementById('navAvatar').textContent = user.username[0].toUpperCase();
+      }
+      citiesData = await API.getCities().catch(() => []);
+      const fCity = document.getElementById('fCity');
+      const mCity = document.getElementById('mCity');
+      citiesData.forEach(c => {
+        fCity.innerHTML += `<option value="${c.city_id}">${c.city_name}</option>`;
+        mCity.innerHTML += `<option value="${c.city_id}" data-name="${c.city_name}">${c.city_name}</option>`;
+      });
+      loadListings();
+    }
+
+    function debounceFilter() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applyFilters, 400);
+    }
+    function applyFilters() { currentPage = 1; loadListings(); }
+    function clearFilters() {
+      ['fCity', 'fType', 'fTransact', 'fBedrooms'].forEach(id => document.getElementById(id).value = '');
+      ['fMinPrice', 'fMaxPrice', 'fSearch'].forEach(id => document.getElementById(id).value = '');
+      applyFilters();
+    }
+
+    async function loadListings() {
+      const params = {
+        page: currentPage, size: 15,
+        city_id: document.getElementById('fCity').value || undefined,
+        property_type: document.getElementById('fType').value || undefined,
+        transact_type: document.getElementById('fTransact').value || undefined,
+        bedroom_num: document.getElementById('fBedrooms').value || undefined,
+        min_price: document.getElementById('fMinPrice').value || undefined,
+        max_price: document.getElementById('fMaxPrice').value || undefined,
+        search: document.getElementById('fSearch').value || undefined,
+      };
+      Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+
+      const tbody = document.getElementById('listingsBody');
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">Loading…</div></td></tr>';
+
+      const res = await API.getListings(params).catch(e => { alert(e.message); return null; });
+      if (!res) return;
+
+      document.getElementById('resultCount').textContent =
+        `${res.total.toLocaleString()} listings found (page ${res.page} of ${res.pages || 1})`;
+
+      if (!res.items.length) {
+        tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div>No listings match your filters.</div></td></tr>';
+        renderPagination(res);
+        return;
+      }
+
+      tbody.innerHTML = res.items.map(l => `
+    <tr>
+      <td><code>${l.listing_id}</code></td>
+      <td style="max-width:200px">
+        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.prop_name || l.prop_id}</div>
+        <div style="font-size:11px;color:var(--muted)">${l.prop_id}</div>
+      </td>
+      <td>
+        <div style="font-weight:500">${l.city_name || '—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${l.locality_name || '—'}</div>
+      </td>
+      <td style="font-size:12px">${l.property_type || '—'}</td>
+      <td>${l.bedroom_num != null ? l.bedroom_num + ' BHK' : '—'}</td>
+      <td>${l.min_area_sqft ? Fmt.number(l.min_area_sqft, 0) : '—'}</td>
+      <td style="font-weight:600">${Fmt.price(l.price_inr)}</td>
+      <td style="font-size:12px">${l.price_sqft ? '₹' + Fmt.number(l.price_sqft, 0) : '—'}</td>
+      <td style="font-size:12px">${Fmt.date(l.register_date)}</td>
+      <td>
+        <span class="badge ${l.transact_type === 2 ? 'tag-rent' : 'tag-sale'}">
+          ${Fmt.transact(l.transact_type)}
+        </span>
+      </td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${l.listing_id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete(${l.listing_id}, '${l.prop_id}')">Del</button>
+      </td>
+    </tr>
+  `).join('');
+
+      renderPagination(res);
+    }
+
+    function renderPagination(res) {
+      const row = document.getElementById('paginationRow');
+      if (res.pages <= 1) { row.innerHTML = ''; return; }
+      let html = `<button onclick="goPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>`;
+      const start = Math.max(1, currentPage - 2);
+      const end = Math.min(res.pages, currentPage + 2);
+      for (let p = start; p <= end; p++) {
+        html += `<button class="${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`;
+      }
+      html += `<button onclick="goPage(${currentPage + 1})" ${currentPage >= res.pages ? 'disabled' : ''}>›</button>`;
+      html += `<span class="pagination-info">${res.total.toLocaleString()} total</span>`;
+      row.innerHTML = html;
+    }
+    function goPage(p) { currentPage = p; loadListings(); }
+
+    // ── Modal ─────────────────────────────────────────────────────────────────────
+    async function loadModalLocalities() {
+      const cityId = document.getElementById('mCity').value;
+      const sel = document.getElementById('mLocality');
+      sel.innerHTML = '<option value="">— Select —</option>';
+      if (!cityId) return;
+      const locs = await API.getLocalities(cityId).catch(() => []);
+      locs.forEach(l => {
+        sel.innerHTML += `<option value="${l.locality_id}">${l.locality_name}</option>`;
+      });
+    }
+
+    function openCreateModal() {
+      editingId = null;
+      document.getElementById('modalTitle').textContent = 'New Listing';
+      document.getElementById('mPropId').value = '';
+      document.getElementById('mPropId').disabled = false;
+      ['mPropName', 'mDesc', 'mMinArea', 'mMaxArea', 'mPrice', 'mPriceSqft', 'mRegDate'].forEach(id =>
+        document.getElementById(id).value = '');
+      document.getElementById('mBedrooms').value = '2';
+      document.getElementById('mBathrooms').value = '2';
+      document.getElementById('mTransact').value = '1';
+      document.getElementById('mFurnish').value = '4';
+      document.getElementById('mVerified').value = 'false';
+      document.getElementById('modalError').style.display = 'none';
+      document.getElementById('listingModal').classList.remove('hidden');
+    }
+
+    async function openEditModal(id) {
+      editingId = id;
+      document.getElementById('modalTitle').textContent = 'Edit Listing #' + id;
+      const l = await API.getListing(id).catch(e => { alert(e.message); return null; });
+      if (!l) return;
+      document.getElementById('mPropId').value = l.prop_id;
+      document.getElementById('mPropId').disabled = true;
+      document.getElementById('mPropName').value = l.prop_name || '';
+      document.getElementById('mDesc').value = l.description || '';
+      document.getElementById('mTransact').value = l.transact_type || 1;
+      document.getElementById('mFurnish').value = l.furnish_id || 0;
+      document.getElementById('mBedrooms').value = l.bedroom_num || '';
+      document.getElementById('mBathrooms').value = l.bathroom_num || '';
+      document.getElementById('mMinArea').value = l.min_area_sqft || '';
+      document.getElementById('mMaxArea').value = l.max_area_sqft || '';
+      document.getElementById('mPrice').value = l.price_inr || '';
+      document.getElementById('mPriceSqft').value = l.price_sqft || '';
+      document.getElementById('mRegDate').value = l.register_date || '';
+      document.getElementById('mVerified').value = l.verified ? 'true' : 'false';
+      // Set city
+      const mCity = document.getElementById('mCity');
+      for (let opt of mCity.options) if (parseInt(opt.value) === l.city_id) { opt.selected = true; break; }
+      await loadModalLocalities();
+      const mLoc = document.getElementById('mLocality');
+      for (let opt of mLoc.options) if (parseInt(opt.value) === l.locality_id) { opt.selected = true; break; }
+      document.getElementById('modalError').style.display = 'none';
+      document.getElementById('listingModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('listingModal').classList.add('hidden');
+      editingId = null;
+    }
+
+    async function submitListing() {
+      const errEl = document.getElementById('modalError');
+      errEl.style.display = 'none';
+      const btn = document.getElementById('modalSubmitBtn');
+      btn.disabled = true; btn.textContent = 'Saving…';
+
+      const payload = {
+        property_type: document.getElementById('mPropType').value,
+        transact_type: parseInt(document.getElementById('mTransact').value),
+        furnish_id: parseInt(document.getElementById('mFurnish').value),
+        bedroom_num: parseInt(document.getElementById('mBedrooms').value) || null,
+        bathroom_num: parseInt(document.getElementById('mBathrooms').value) || null,
+        min_area_sqft: parseFloat(document.getElementById('mMinArea').value) || null,
+        max_area_sqft: parseFloat(document.getElementById('mMaxArea').value) || null,
+        price_inr: parseFloat(document.getElementById('mPrice').value),
+        price_sqft: parseFloat(document.getElementById('mPriceSqft').value) || null,
+        prop_name: document.getElementById('mPropName').value || null,
+        description: document.getElementById('mDesc').value || null,
+        register_date: document.getElementById('mRegDate').value || null,
+        verified: document.getElementById('mVerified').value === 'true',
+        city_id: parseInt(document.getElementById('mCity').value),
+        locality_id: parseInt(document.getElementById('mLocality').value) || null,
+      };
+
+      if (!payload.city_id) { showErr('City is required.'); btn.disabled = false; btn.textContent = 'Save Listing'; return; }
+      if (!payload.price_inr) { showErr('Price is required.'); btn.disabled = false; btn.textContent = 'Save Listing'; return; }
+
+      try {
+        if (editingId) {
+          await API.updateListing(editingId, payload);
+        } else {
+          payload.prop_id = document.getElementById('mPropId').value.trim();
+          if (!payload.prop_id) { showErr('Prop ID is required.'); btn.disabled = false; btn.textContent = 'Save Listing'; return; }
+          await API.createListing(payload);
+        }
+        closeModal();
+        loadListings();
+      } catch (e) {
+        showErr(e.message);
+      }
+      btn.disabled = false; btn.textContent = 'Save Listing';
+    }
+
+    function showErr(msg) {
+      const el = document.getElementById('modalError');
+      el.textContent = msg; el.style.display = 'block';
+    }
+
+    async function confirmDelete(id, propId) {
+      if (!confirm(`Delete listing "${propId}" (ID ${id})?\nThis will mark it as inactive.`)) return;
+      await API.deleteListing(id).catch(e => alert(e.message));
+      loadListings();
+    }
+
+    function logout() { localStorage.removeItem('re_token'); window.location.href = 'login.html'; }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+
+</html>

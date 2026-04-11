@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropAnalytics — Transactions</title>
+<meta name="description" content="Track and manage real estate transactions — record deals, filter by status, date, and listing.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="icon">🏠</div>
+      <div><div class="name">PropAnalytics</div><div class="sub">Real Estate Intelligence</div></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Analytics</div>
+      <a class="nav-item" href="index.html"><span class="icon">📊</span> Dashboard</a>
+      <a class="nav-item" href="admin.html"><span class="icon">🏘️</span> Listings</a>
+      <a class="nav-item" href="agents.html"><span class="icon">👤</span> Agents</a>
+      <a class="nav-item active" href="transactions.html"><span class="icon">💰</span> Transactions</a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="navAvatar">A</div>
+      <div><div class="user-name" id="navUsername">—</div><div class="user-role" id="navRole">—</div></div>
+      <button class="logout-btn" onclick="logout()" title="Logout">⇥</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Transaction Management</div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openCreate()">+ Record Transaction</button>
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="filters-bar">
+        <div class="filter-group">
+          <span class="filter-label">Status</span>
+          <select id="fStatus" onchange="load()">
+            <option value="">All</option>
+            <option value="Completed">Completed</option>
+            <option value="Pending">Pending</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">From</span>
+          <input type="date" id="fFrom" onchange="load()">
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">To</span>
+          <input type="date" id="fTo" onchange="load()">
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Listing ID</span>
+          <input type="number" id="fListing" placeholder="e.g. 123" style="width:110px" oninput="debounce()">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="clearF()">Clear</button>
+      </div>
+
+      <div class="chart-card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Txn ID</th><th>Listing</th><th>City</th><th>Property Type</th>
+                <th>Buyer</th><th>Ownership</th><th style="text-align:right">Sale Price</th>
+                <th>Date</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="txnBody">
+              <tr><td colspan="10"><div class="empty-state">Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="txnModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title" id="modalTitle">Record Transaction</div>
+    <div class="form-row">
+      <div class="form-group-modal">
+        <label>Listing ID *</label>
+        <input type="number" id="mListingId" placeholder="e.g. 1234">
+      </div>
+      <div class="form-group-modal">
+        <label>Sale Price (₹) *</label>
+        <input type="number" id="mPrice" placeholder="5000000">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group-modal">
+        <label>Transaction Date *</label>
+        <input type="date" id="mDate">
+      </div>
+      <div class="form-group-modal">
+        <label>Status</label>
+        <select id="mStatus">
+          <option value="Completed">Completed</option>
+          <option value="Pending">Pending</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group-modal">
+        <label>Buyer Name</label>
+        <input type="text" id="mBuyer" placeholder="Anil Sharma">
+      </div>
+      <div class="form-group-modal">
+        <label>Ownership Type</label>
+        <select id="mOwnership">
+          <option>Freehold</option>
+          <option>Leasehold</option>
+          <option>Co-operative Society</option>
+          <option>Power of Attorney</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group-modal" style="margin-bottom:12px">
+      <label>Notes</label>
+      <textarea id="mNotes" placeholder="Optional remarks…"></textarea>
+    </div>
+    <div id="modalErr" style="display:none;color:var(--red);font-size:13px;margin-bottom:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submit()" id="submitBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let editId = null, dTimer = null;
+
+async function init() {
+  if (!requireAuth()) return;
+  const u = await API.me().catch(()=>null);
+  if (u) {
+    document.getElementById('navUsername').textContent = u.username;
+    document.getElementById('navRole').textContent = u.role;
+    document.getElementById('navAvatar').textContent = u.username[0].toUpperCase();
+  }
+  load();
+}
+
+function debounce() { clearTimeout(dTimer); dTimer = setTimeout(load, 350); }
+function clearF() {
+  ['fStatus','fFrom','fTo','fListing'].forEach(id => document.getElementById(id).value='');
+  load();
+}
+
+async function load() {
+  const params = {
+    status:     document.getElementById('fStatus').value || undefined,
+    date_from:  document.getElementById('fFrom').value   || undefined,
+    date_to:    document.getElementById('fTo').value     || undefined,
+    listing_id: document.getElementById('fListing').value || undefined,
+    limit: 100,
+  };
+  const tbody = document.getElementById('txnBody');
+  const txns = await API.getTransactions(params).catch(e => { alert(e.message); return []; });
+  if (!txns.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="icon">💰</div>No transactions found.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = txns.map(t => `
+    <tr>
+      <td><code>${t.txn_id}</code></td>
+      <td><code>${t.listing_id}</code></td>
+      <td style="font-size:12px">${t.city_name || '—'}</td>
+      <td style="font-size:12px">${t.property_type || '—'}</td>
+      <td style="font-weight:500">${t.buyer_name || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${t.ownership_type || '—'}</td>
+      <td style="text-align:right;font-weight:600;color:var(--green)">${Fmt.price(t.sale_price)}</td>
+      <td style="font-size:12px">${Fmt.date(t.transaction_date)}</td>
+      <td><span class="badge tag-${t.status.toLowerCase()}">${t.status}</span></td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="openEdit(${t.txn_id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="del(${t.txn_id})">Del</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openCreate() {
+  editId = null;
+  document.getElementById('modalTitle').textContent = 'Record Transaction';
+  ['mListingId','mPrice','mBuyer','mNotes'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('mDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('mStatus').value = 'Completed';
+  document.getElementById('mOwnership').value = 'Freehold';
+  document.getElementById('modalErr').style.display='none';
+  document.getElementById('txnModal').classList.remove('hidden');
+}
+
+async function openEdit(id) {
+  editId = id;
+  const t = await API.getTransaction(id).catch(e => { alert(e.message); return null; });
+  if (!t) return;
+  document.getElementById('modalTitle').textContent = 'Edit Transaction #' + id;
+  document.getElementById('mListingId').value = t.listing_id;
+  document.getElementById('mPrice').value     = t.sale_price;
+  document.getElementById('mDate').value      = t.transaction_date;
+  document.getElementById('mStatus').value    = t.status;
+  document.getElementById('mBuyer').value     = t.buyer_name || '';
+  document.getElementById('mOwnership').value = t.ownership_type || 'Freehold';
+  document.getElementById('mNotes').value     = t.notes || '';
+  document.getElementById('modalErr').style.display='none';
+  document.getElementById('txnModal').classList.remove('hidden');
+}
+
+function closeModal() { document.getElementById('txnModal').classList.add('hidden'); editId=null; }
+
+async function submit() {
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('modalErr');
+  btn.disabled=true; btn.textContent='Saving…'; err.style.display='none';
+  const payload = {
+    listing_id:       parseInt(document.getElementById('mListingId').value),
+    sale_price:       parseFloat(document.getElementById('mPrice').value),
+    transaction_date: document.getElementById('mDate').value,
+    status:           document.getElementById('mStatus').value,
+    buyer_name:       document.getElementById('mBuyer').value || null,
+    ownership_type:   document.getElementById('mOwnership').value || null,
+    notes:            document.getElementById('mNotes').value || null,
+  };
+  if (!payload.listing_id || !payload.sale_price || !payload.transaction_date) {
+    err.textContent='Listing ID, Sale Price, and Date are required.';
+    err.style.display='block'; btn.disabled=false; btn.textContent='Save'; return;
+  }
+  try {
+    if (editId) await API.updateTransaction(editId, payload);
+    else        await API.createTransaction(payload);
+    closeModal(); load();
+  } catch(e) { err.textContent=e.message; err.style.display='block'; }
+  btn.disabled=false; btn.textContent='Save';
+}
+
+async function del(id) {
+  if (!confirm('Permanently delete transaction #' + id + '?')) return;
+  await API.deleteTransaction(id).catch(e => alert(e.message));
+  load();
+}
+
+function logout() { localStorage.removeItem('re_token'); window.location.href='login.html'; }
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

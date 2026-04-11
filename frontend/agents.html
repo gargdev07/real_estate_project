@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropAnalytics — Agents</title>
+<meta name="description" content="Manage real estate agents — register, update, search, and deactivate property agents.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="icon">🏠</div>
+      <div><div class="name">PropAnalytics</div><div class="sub">Real Estate Intelligence</div></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Analytics</div>
+      <a class="nav-item" href="index.html"><span class="icon">📊</span> Dashboard</a>
+      <a class="nav-item" href="admin.html"><span class="icon">🏘️</span> Listings</a>
+      <a class="nav-item active" href="agents.html"><span class="icon">👤</span> Agents</a>
+      <a class="nav-item" href="transactions.html"><span class="icon">💰</span> Transactions</a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="navAvatar">A</div>
+      <div><div class="user-name" id="navUsername">—</div><div class="user-role" id="navRole">—</div></div>
+      <button class="logout-btn" onclick="logout()" title="Logout">⇥</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Agent Management</div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openCreate()">+ New Agent</button>
+      </div>
+    </div>
+
+    <div class="page-body">
+      <div class="filters-bar">
+        <div class="filter-group">
+          <input type="text" id="fSearch" placeholder="Search name or company…" style="width:260px" oninput="debounce()">
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Status</span>
+          <select id="fStatus" onchange="load()">
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+            <option value="">All</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="clearF()">Clear</button>
+      </div>
+
+      <div class="chart-card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Name</th><th>Company</th><th>Phone</th><th>Email</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="agentsBody">
+              <tr><td colspan="7"><div class="empty-state">Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="agentModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title" id="modalTitle">New Agent</div>
+    <div class="form-group-modal" style="margin-bottom:12px">
+      <label>Full Name *</label>
+      <input type="text" id="mName" placeholder="Rahul Sharma">
+    </div>
+    <div class="form-group-modal" style="margin-bottom:12px">
+      <label>Company</label>
+      <input type="text" id="mCompany" placeholder="XYZ Realty">
+    </div>
+    <div class="form-row">
+      <div class="form-group-modal">
+        <label>Phone</label>
+        <input type="text" id="mPhone" placeholder="+91 9XXXXXXXXX">
+      </div>
+      <div class="form-group-modal">
+        <label>Email</label>
+        <input type="email" id="mEmail" placeholder="agent@example.com">
+      </div>
+    </div>
+    <div id="modalErr" style="display:none;color:var(--red);font-size:13px;margin-top:10px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submit()" id="submitBtn">Save Agent</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let editId = null, timer = null;
+
+async function init() {
+  if (!requireAuth()) return;
+  const u = await API.me().catch(()=>null);
+  if (u) {
+    document.getElementById('navUsername').textContent = u.username;
+    document.getElementById('navRole').textContent = u.role;
+    document.getElementById('navAvatar').textContent = u.username[0].toUpperCase();
+  }
+  load();
+}
+
+function debounce() { clearTimeout(timer); timer = setTimeout(load, 350); }
+function clearF() { document.getElementById('fSearch').value=''; load(); }
+
+async function load() {
+  const params = {
+    search:    document.getElementById('fSearch').value || undefined,
+    is_active: document.getElementById('fStatus').value || undefined,
+    limit: 100,
+  };
+  const tbody = document.getElementById('agentsBody');
+  const agents = await API.getAgents(params).catch(e => { alert(e.message); return []; });
+  if (!agents.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">👤</div>No agents found.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = agents.map(a => `
+    <tr>
+      <td><code>${a.agent_id}</code></td>
+      <td style="font-weight:500">${a.contact_name || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${a.company_name || '—'}</td>
+      <td style="font-size:12px">${a.phone || '—'}</td>
+      <td style="font-size:12px">${a.email || '—'}</td>
+      <td><span class="badge ${a.is_active?'tag-sale':'tag-cancelled'}">${a.is_active?'Active':'Inactive'}</span></td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="openEdit(${a.agent_id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deactivate(${a.agent_id})">Deactivate</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openCreate() {
+  editId = null;
+  document.getElementById('modalTitle').textContent = 'New Agent';
+  ['mName','mCompany','mPhone','mEmail'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('modalErr').style.display='none';
+  document.getElementById('agentModal').classList.remove('hidden');
+}
+
+async function openEdit(id) {
+  editId = id;
+  const a = await API.getAgent(id).catch(e => { alert(e.message); return null; });
+  if (!a) return;
+  document.getElementById('modalTitle').textContent = 'Edit Agent #' + id;
+  document.getElementById('mName').value    = a.contact_name || '';
+  document.getElementById('mCompany').value = a.company_name || '';
+  document.getElementById('mPhone').value   = a.phone || '';
+  document.getElementById('mEmail').value   = a.email || '';
+  document.getElementById('modalErr').style.display='none';
+  document.getElementById('agentModal').classList.remove('hidden');
+}
+
+function closeModal() { document.getElementById('agentModal').classList.add('hidden'); editId=null; }
+
+async function submit() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const err = document.getElementById('modalErr');
+  err.style.display = 'none';
+  const name = document.getElementById('mName').value.trim();
+  if (!name) { err.textContent='Name is required.'; err.style.display='block'; btn.disabled=false; btn.textContent='Save Agent'; return; }
+  const payload = {
+    contact_name: name,
+    company_name: document.getElementById('mCompany').value || null,
+    phone:        document.getElementById('mPhone').value   || null,
+    email:        document.getElementById('mEmail').value   || null,
+  };
+  try {
+    if (editId) await API.updateAgent(editId, payload);
+    else        await API.createAgent(payload);
+    closeModal(); load();
+  } catch(e) { err.textContent=e.message; err.style.display='block'; }
+  btn.disabled=false; btn.textContent='Save Agent';
+}
+
+async function deactivate(id) {
+  if (!confirm('Deactivate this agent?')) return;
+  await API.deleteAgent(id).catch(e => alert(e.message));
+  load();
+}
+
+function logout() { localStorage.removeItem('re_token'); window.location.href='login.html'; }
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

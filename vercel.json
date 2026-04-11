@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/main.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "frontend/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/auth/(.*)",             "dest": "/api/main.py" },
+    { "src": "/analytics/(.*)",        "dest": "/api/main.py" },
+    { "src": "/listings(/?.*)",        "dest": "/api/main.py" },
+    { "src": "/agents(/?.*)",          "dest": "/api/main.py" },
+    { "src": "/transactions(/?.*)",    "dest": "/api/main.py" },
+    { "src": "/health",                "dest": "/api/main.py" },
+    { "src": "/docs",                  "dest": "/api/main.py" },
+    { "src": "/openapi.json",          "dest": "/api/main.py" },
+    { "src": "/app/(.*)",              "dest": "/frontend/$1" },
+    { "src": "/(.*\\.html)",           "dest": "/frontend/$1" },
+    { "src": "/(.*\\.css)",            "dest": "/frontend/$1" },
+    { "src": "/(.*\\.js)",             "dest": "/frontend/$1" },
+    { "src": "/css/(.*)",              "dest": "/frontend/css/$1" },
+    { "src": "/js/(.*)",               "dest": "/frontend/js/$1" },
+    { "src": "/",                      "dest": "/frontend/login.html" }
+  ]
+}
