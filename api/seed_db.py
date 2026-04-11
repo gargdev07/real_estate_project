@@ -4,12 +4,11 @@ For full data loading (CSV -> all 6 tables), use scripts/seed_db.py instead.
 """
 from database import engine, Base, SessionLocal
 import models
-from passlib.context import CryptContext
+import bcrypt
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 
 def hash_password(password: str):
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 def seed():
     # Create ORM tables (does NOT create materialized views - run schema.sql for those)
