@@ -25,3 +25,5 @@ postgres_data/
 
 # Vercel
 .vercel/
+
+.vercel

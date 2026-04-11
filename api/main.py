@@ -1,8 +1,12 @@
+import sys, os
+
+# ── Ensure sibling modules are importable (required for Vercel serverless) ────
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-import os
 
 
 from database import check_db_connection
