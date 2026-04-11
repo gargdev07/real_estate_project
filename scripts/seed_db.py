@@ -21,16 +21,14 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
-from passlib.context import CryptContext
+import bcrypt
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-DATABASE_URL = "postgresql://admin:1234@127.0.0.1:5433/real_estate"
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:1234@127.0.0.1:5433/real_estate")
 
 FURNISH_MAP = {0: "Unknown", 1: "Furnished", 2: "Semi-Furnished", 3: "Semi-Furnished", 4: "Unfurnished"}
 OWNERSHIP_TYPES = ["Freehold", "Leasehold", "Co-operative Society", "Power of Attorney"]
@@ -215,6 +213,7 @@ def upsert_localities(conn, rows: list[dict], city_map: dict[str, int]) -> dict[
     cur = conn.cursor()
     mapping = {}
     seen = set()
+    batch = []
     for r in rows:
         key = (r["locality_name"], r["city_name"])
         if key in seen or not r["locality_name"]:
@@ -224,16 +223,18 @@ def upsert_localities(conn, rows: list[dict], city_map: dict[str, int]) -> dict[
         if not cid:
             continue
         lat, lng = r.get("latitude"), r.get("longitude")
-        cur.execute("""
+        batch.append((r["locality_name"], cid, lat, lng))
+    
+    if batch:
+        execute_values(cur, """
             INSERT INTO localities(locality_name, city_id, latitude, longitude)
-            VALUES (%s, %s, %s, %s)
+            VALUES %s
             ON CONFLICT(locality_name, city_id) DO UPDATE
               SET latitude  = COALESCE(EXCLUDED.latitude,  localities.latitude),
                   longitude = COALESCE(EXCLUDED.longitude, localities.longitude)
-            RETURNING locality_id
-        """, (r["locality_name"], cid, lat, lng))
-        mapping[(r["locality_name"], cid)] = cur.fetchone()[0]
-    conn.commit()
+        """, batch)
+        conn.commit()
+
     # Re-fetch all to cover conflicts
     cur.execute("SELECT locality_id, locality_name, city_id FROM localities")
     for lid, lname, cid in cur.fetchall():
@@ -280,7 +281,8 @@ def upsert_buildings(conn, rows: list[dict], locality_map: dict, city_map: dict)
 def upsert_agents(conn, rows: list[dict]) -> dict[str, int]:
     cur = conn.cursor()
     mapping = {}
-    seen = {}
+    seen = set()
+    batch = []
     for r in rows:
         name = str(r.get("contact_name") or "").strip()
         company = str(r.get("company_name") or "").strip()
@@ -288,23 +290,22 @@ def upsert_agents(conn, rows: list[dict]) -> dict[str, int]:
             continue
         key = (name.lower(), company.lower())
         if key in seen:
-            mapping[name] = seen[key]
             continue
-        cur.execute("""
+        seen.add(key)
+        batch.append((name or None, company or None))
+        
+    if batch:
+        execute_values(cur, """
             INSERT INTO agents(contact_name, company_name)
-            VALUES (%s, %s)
+            VALUES %s
             ON CONFLICT DO NOTHING
-            RETURNING agent_id
-        """, (name or None, company or None))
-        row = cur.fetchone()
-        if row:
-            seen[key] = row[0]
-            mapping[name] = row[0]
-    conn.commit()
-    # fill gaps from existing
+        """, batch)
+        conn.commit()
+        
+    # fill mapping from existing
     cur.execute("SELECT agent_id, contact_name, company_name FROM agents")
     for aid, aname, _ in cur.fetchall():
-        if aname and aname not in mapping:
+        if aname:
             mapping[aname] = aid
     return mapping
 
@@ -359,24 +360,28 @@ def insert_listings(conn, df: pd.DataFrame, city_map, locality_map, building_ids
         return []
 
     result_ids = []
-    chunk = 500
+    chunk = 200
     for i in range(0, len(batch), chunk):
-        execute_values(cur, """
-            INSERT INTO listings (
-                prop_id, property_type, transact_type,
-                bedroom_num, bathroom_num, balcony_num, furnish_id,
-                age, floor_num, total_floor,
-                min_area_sqft, max_area_sqft, price_inr, price_sqft,
-                description, prop_name, latitude, longitude,
-                register_date, expiry_date, verified,
-                building_id, agent_id, city_id, locality_id, amenities
-            ) VALUES %s
-            ON CONFLICT(prop_id) DO NOTHING
-            RETURNING listing_id
-        """, batch[i:i+chunk])
-        result_ids.extend([row[0] for row in cur.fetchall()])
+        try:
+            execute_values(cur, """
+                INSERT INTO listings (
+                    prop_id, property_type, transact_type,
+                    bedroom_num, bathroom_num, balcony_num, furnish_id,
+                    age, floor_num, total_floor,
+                    min_area_sqft, max_area_sqft, price_inr, price_sqft,
+                    description, prop_name, latitude, longitude,
+                    register_date, expiry_date, verified,
+                    building_id, agent_id, city_id, locality_id, amenities
+                ) VALUES %s
+                ON CONFLICT(prop_id) DO NOTHING
+                RETURNING listing_id
+            """, batch[i:i+chunk])
+            result_ids.extend([row[0] for row in cur.fetchall()])
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log.warning(f"Chunk failed: {e}")
 
-    conn.commit()
     return result_ids
 
 
@@ -421,8 +426,8 @@ def insert_transactions(conn, listing_ids: list[int], n_per_listing_prob: float 
 def insert_default_users(conn):
     cur = conn.cursor()
     users = [
-        ("admin",   "admin@realestate.com",   pwd_ctx.hash("admin123"),   "admin"),
-        ("analyst", "analyst@realestate.com", pwd_ctx.hash("analyst123"), "analyst"),
+        ("admin",   "admin@realestate.com",   bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode('utf-8'),   "admin"),
+        ("analyst", "analyst@realestate.com", bcrypt.hashpw(b"analyst123", bcrypt.gensalt()).decode('utf-8'), "analyst"),
     ]
     for username, email, hashed, role in users:
         cur.execute("""
